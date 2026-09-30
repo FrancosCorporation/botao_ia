@@ -1,8 +1,8 @@
 // UI do futebol de botão — canvas com o campo, os discos e a bola; controle por clique-arrasto (flick).
 // O humano é o time A (esquerda, ataca para a direita). A IA é o B. 3 lances por turno.
 
-import { estadoInicialFisica, passo, parado, reposicionaBola, toque, LARGURA, ALTURA, GOL_Y0, GOL_Y1, IMPULSO } from './fisica.js';
-import { lanceIA } from './ia.js';
+import { estadoInicialFisica, passo, parado, reposicionaBola, toque, LARGURA, ALTURA, GOL_Y0, GOL_Y1 } from './fisica.js';
+import { lanceIA, aplicaLance } from './ia.js';
 
 const $canvas = document.getElementById('campo');
 const $status = document.getElementById('status');
@@ -107,6 +107,7 @@ function rodaFisica() {
         lancesIAFeitos = 0;
         fase = 'humano';
         lancesRestantes = 3;
+        movidosHumano = [];
         avisa('Seu turno: 3 lances — clique num botão e arraste');
       }
     } else if (lancesRestantes > 0) {
@@ -114,19 +115,29 @@ function rodaFisica() {
     } else {
       fase = 'ia';
       lancesIAFeitos = 0;
+      movidosIA = []; // cada turno começa limpo (regra: não repetir botão)
       avisa('Turno da IA...');
       setTimeout(lanceDaIA, 700);
     }
   }
 }
 
+const INTENCAO = {
+  chute: 'IA CHUTA pro gol!',
+  posicao: 'IA se posiciona atrás da bola pra chutar',
+  bloqueio: 'IA bloqueia o caminho do gol',
+  goleiro: 'Goleiro acompanha a bola',
+  aproximar: 'IA avança em direção à bola',
+};
+
 function lanceDaIA() {
   if (esperandoFisica) return;
-  const lance = lanceIA(estado, lancesIAFeitos === 0 ? [] : movidosDaIA());
+  const lance = lanceIA(estado, movidosIA);
   if (lance) {
-    toque(lance.disco, lance.alvoX - lance.disco.x, lance.alvoY - lance.disco.y);
+    aplicaLance(estado, lance); // impulso proporcional: chega na bola / para no alvo
+    movidosIA.push(lance.disco); // regra dos 3 lances: não repete o botão
     esperandoFisica = true;
-    avisa(`IA jogando (lance ${lancesIAFeitos + 1}/3)...`);
+    avisa(`${INTENCAO[lance.tipo] || 'IA jogando'} (lance ${lancesIAFeitos + 1}/3)`);
   } else {
     // sem lance: passa a vez (conta como lance feito)
     lancesIAFeitos++;
@@ -135,13 +146,14 @@ function lanceDaIA() {
       lancesIAFeitos = 0;
       fase = 'humano';
       lancesRestantes = 3;
+      movidosHumano = [];
       avisa('Seu turno: 3 lances');
     }
   }
 }
 
 let movidosIA = [];
-function movidosDaIA() { return movidosIA; }
+let movidosHumano = []; // botões já mexidos pelo humano no turno (regra: não repetir)
 
 // converte as coordenadas da tela para as do jogo (o canvas escala por CSS)
 function coordsJogo(e) {
@@ -172,10 +184,18 @@ window.addEventListener('mouseup', (e) => {
   if (arrasto && discoSelecionado && fase === 'humano' && !esperandoFisica) {
     const dx = arrasto.x1 - discoSelecionado.x, dy = arrasto.y1 - discoSelecionado.y;
     if (Math.hypot(dx, dy) > 8) {
-      toque(discoSelecionado, dx, dy, IMPULSO);
-      lancesRestantes--;
-      esperandoFisica = true;
-      avisa(`Lance dado! ${lancesRestantes} restante(s)`);
+      if (movidosHumano.includes(discoSelecionado)) {
+        avisa('Você já mexeu esse botão neste turno — escolha outro');
+      } else {
+        // impulso PROPORCIONAL ao arrasto: arrasto curto = toque leve; arrasto longo = força máxima
+        // (a física desliza ~40×v0 px — o arrasto vira a distância que o botão vai andar)
+        const v0 = Math.min(9, Math.max(0.8, Math.hypot(dx, dy) / 45 + 0.5));
+        toque(discoSelecionado, dx, dy, v0);
+        movidosHumano.push(discoSelecionado); // regra dos 3 lances: não repete o botão
+        lancesRestantes--;
+        esperandoFisica = true;
+        avisa(`Lance dado! ${lancesRestantes} restante(s)`);
+      }
     }
     arrasto = null;
     discoSelecionado = null;
@@ -188,6 +208,7 @@ $reiniciar.addEventListener('click', () => {
   lancesRestantes = 3;
   lancesIAFeitos = 0;
   movidosIA = [];
+  movidosHumano = [];
   discoSelecionado = null;
   arrasto = null;
   esperandoFisica = false;

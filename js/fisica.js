@@ -14,7 +14,8 @@ export const IMPULSO = 9;
 export const PARADA = 0.08; // velocidade abaixo disso = parado
 
 export function formação(time) {
-  // 1 goleiro + 9 de linha: 2-4-3 (formação clássica)
+  // 1 goleiro + 9 de linha (2-4-2-1). As linhas do meio EVITAM a linha do centro (y=250):
+  // a bola começa em (400,250) e nenhum botão pode sanduíchá-la — senão todo chute ricocheteia na hora.
   const discos = [];
   const lado = time === 'A' ? 1 : -1; // A ataca para a direita (gol B); B para a esquerda (gol A)
   const base = time === 'A' ? 70 : LARGURA - 70;
@@ -23,12 +24,11 @@ export function formação(time) {
   discos.push({ x: cx, y: ALTURA / 2, vx: 0, vy: 0, r: 20, time, goleiro: true });
 
   const linhas = [
-    { dx: 0, ys: [140, 360] },                    // 2 zagueiros
-    { dx: 150, ys: [90, 250, 410] },              // 3 meio-campistas
-    { dx: 300, ys: [180, 250, 320] },             // 3 meias-atacantes
-    { dx: 430, ys: [250] },                       // 1 centroavante
+    { dx: 0, ys: [140, 360] },             // 2 zagueiros
+    { dx: 150, ys: [90, 190, 310, 410] }, // 4 meio-campistas (fora da linha do centro)
+    { dx: 300, ys: [160, 340] },          // 2 pontas (abertos)
+    { dx: 430, ys: [250] },                // 1 centroavante (adiante da bola, não atrás)
   ];
-  // 2-3-3-1 = 9 de linha
   for (const linha of linhas) {
     for (const y of linha.ys) {
       discos.push({ x: base + linha.dx * lado, y, vx: 0, vy: 0, r: 18, time });
@@ -118,7 +118,10 @@ export function passo(estado) {
     }
   }
 
-  // colisões disco-bola (a bola é leve: recebe quase todo o impulso)
+  // colisões disco-bola ELÁSTICAS (restituição e=0.8): a bola quica nos botões.
+  // Modelo: bola leve vs botão pesado → vBola' = (1+e)·vDisco − e·vBola (na normal).
+  //   botão chuta a bola: ela sai a 1.8× a velocidade do botão ✔
+  //   bola bate num botão parado: ela RICA de volta a 80% ✔ (antes: morria na frente — o bug!)
   for (const d of discos) {
     const dx = bola.x - d.x, dy = bola.y - d.y;
     const dist = Math.hypot(dx, dy);
@@ -129,9 +132,13 @@ export function passo(estado) {
       bola.x += nx * overlap; bola.y += ny * overlap;
       const vDisco = d.vx * nx + d.vy * ny;
       const vBola = bola.vx * nx + bola.vy * ny;
-      const delta = (vDisco * 1.8) - vBola; // bola leve: ganha mais que o disco dá
-      bola.vx += delta * nx; bola.vy += delta * ny;
-      d.vx *= 0.35; d.vy *= 0.35; // o disco perde força no impacto
+      if (vBola - vDisco < 0) { // só se ainda estão se aproximando
+        const e = 0.8;
+        const novoVBola = (1 + e) * vDisco - e * vBola;
+        const delta = novoVBola - vBola;
+        bola.vx += delta * nx; bola.vy += delta * ny;
+        d.vx *= 0.35; d.vy *= 0.35; // o botão pesado quase não sente o impacto
+      }
     }
   }
 

@@ -4,11 +4,12 @@ Eu queria jogar futebol de botão no navegador — aquele jogo clássico dos bot
 
 ## O que tem
 
-- **Física própria**: discos com atrito, bola leve que recebe quase todo o impulso no impacto, colisões elásticas disco-disco, paredes que rebatem e gols com abertura real nas laterais
-- **IA com linha de raciocínio** (o "cérebro" mínimo que pensa, na ordem): 1) o goleiro segue a bola no eixo do gol · 2) chuta ao gol quando algum disco está atrás da bola alinhado · 3) bloqueia a linha quando o adversário ameaça · 4) posiciona o disco mais próximo atrás da bola para o próximo chute
-- **Regra clássica dos 3 lances**: cada turno dá direito a 3 lances, sem repetir o mesmo botão no mesmo turno
-- **Formação 2-3-3-1** (1 goleiro + 9 de linha) para cada time
-- **Controle por flick**: clica no botão vermelho, arrasta na direção e solta — o disco desliza e a bola recebe o impacto
+- **Física própria com bola VIVA**: colisão disco-bola ELÁSTICA (restituição 0.8 — a bola quica nos botões em vez de morrer na frente), colisões disco-disco elásticas, paredes que rebatem e gols com abertura real nas laterais
+- **IA 100% focada no objetivo: fazer o gol** (heurística geométrica, sem LLM): cada lance segue a fila 1) goleiro acompanha a bola no eixo do gol · 2) **CHUTA pro gol** o disco melhor alinhado atrás da bola (cosseno bola→gol > 0.55) · 3) bloqueia a linha quando o adversário ameaça · 4) **posiciona o disco mais perto do PONTO DE CHUTE** (atrás da bola, alinhado bola→gol) · 5) avança até a bola. A intenção de cada lance aparece no placar de status ("IA CHUTA pro gol!")
+- **Impulso PROPORCIONAL à distância** (IA e humano): o arrasto é a distância que o botão vai andar — arrasto curto = toque de efeito, arrasto longo = força máxima; a IA chega na bola com força de sobra (o chute voa pro gol) e para no alvo quando posiciona
+- **Regra clássica dos 3 lances**: cada turno dá direito a 3 lances, SEM repetir o mesmo botão (vale para os dois times)
+- **Formação 2-4-2-1** (1 goleiro + 9 de linha) sem botão na linha do centro — a bola começa livre, sem sanduíche
+- **Controle por flick**: clica no botão vermelho, arrasta na direção e solta
 
 ## Como rodar
 
@@ -21,12 +22,13 @@ npm test           # 17 testes da física + da IA (node --test)
 
 ## Como foi testado
 
-17 testes automatizados (node --test) cobrindo a física e a IA, todos passando:
+22 testes automatizados (node --test) cobrindo a física e a IA, todos passando, + partida real no browser verificando o GOL da IA:
 
-- **Física (11)**: formação com 10 discos por time (1 goleiro + 9) · toque com impulso normalizado (módulo mantido em qualquer direção) · a bola desacelera até parar · a parede rebate · gol marcado dentro da abertura (placar incrementa) · reposicionaBola no centro · colisão disco-bola (a bola ganha velocidade, o disco perde força) · colisão disco-disco (ambos mudam) · parado() · o goleiro para mais rápido (atrito maior)
-- **IA (6)**: o goleiro segue a bola na vertical · chuta ao gol (disco atrás da bola mira o ponto de chute) · bloqueia quando o adversário ameaça (interpõe na linha bola→gol) · 3 lances por turno sem repetir disco · sem lance disponível devolve null · o lance aplica velocidade no disco escolhido
+- **Física (11)**: formação com 10 discos por time (1 goleiro + 9) · toque com impulso normalizado · a bola desacelera até parar · a parede rebate · gol dentro da abertura (placar incrementa) · reposicionaBola no centro · colisão disco-bola (a bola voa, o botão amortece) · **a bola RICA num botão parado a 80% (restituição)** · colisão disco-disco (ambos mudam) · parado() · o goleiro para mais rápido
+- **IA (11)**: o goleiro segue a bola na vertical · chuta ao gol · bloqueia quando o adversário ameaça · 3 lances por turno sem repetir disco · sem lance disponível devolve null · o lance aplica velocidade · **impulso proporcional do chute** (chega na bola com força, não atravessa) · **posicionamento para no alvo** (não atravessa o campo) · **disco desalinhado NUNCA chuta de lado** (posiciona) · **o chute mira a própria bola**
+- **Partida real no browser**: turno do humano + turno da IA → "IA CHUTA pro gol!" → **GOL da IA** (placar 0×1)
 
-O bug clássico do canvas escalado (o clique não achava o disco porque as coordenadas da tela não convertiam para as do jogo) foi encontrado testando no browser real e corrigido com a conversão de escala nos handlers.
+Quatro bugs reais encontrados e corrigidos pelos próprios testes e pelo browser: o canvas escalado (clique não achava o disco), a colisão INELÁSTICA (a bola morria na frente de qualquer botão parado — não marcava gol nunca), os lances com força total (todo botão atravessava o campo, parecendo aleatório) e a formação com botões sanduíchando a bola no centro (todo chute ricocheteia na hora).
 
 ## Estrutura
 

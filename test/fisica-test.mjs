@@ -41,10 +41,10 @@ test('toque: o disco desliza na direção do vetor com o impulso', () => {
 
 test('a bola desacelera até parar (atrito)', () => {
   const s = estadoInicialFisica();
-  s.bola.vx = 10; s.bola.vy = 0;
+  s.bola.x = 400; s.bola.y = 60; s.bola.vx = 5; s.bola.vy = 0; // linha limpa (sem discos no caminho)
   for (let i = 0; i < 3000; i++) passo(s);
   assert.equal(s.bola.vx, 0, 'a bola parou');
-  assert.ok(s.bola.x > LARGURA / 2, 'a bola andou para a direita antes de parar');
+  assert.ok(s.bola.x > 500, `a bola andou para a direita antes de parar (parou em ${s.bola.x.toFixed(0)})`);
 });
 
 test('parede rebate a bola (fora da abertura do gol)', () => {
@@ -84,28 +84,45 @@ test('reposicionaBola devolve a bola ao centro com velocidade zero', () => {
 
 test('colisão disco-bola: a bola recebe o impulso e o disco desacelera', () => {
   const s = estadoInicialFisica();
-  // coloca um disco do A encostado na bola e dá impulso na direção dela
+  // linha limpa y=60: o chutador a 30px da bola, nenhum outro disco no caminho
   const d = s.discos.find(d => d.time === 'A' && !d.goleiro);
-  d.x = s.bola.x - 30; d.y = s.bola.y; d.vx = 0; d.vy = 0;
+  d.x = 340; d.y = 60; d.vx = 0; d.vy = 0;
+  s.bola.x = 400; s.bola.y = 60; s.bola.vx = 0; s.bola.vy = 0;
   toque(d, 1, 0, 9); // o disco vai para a direita, na bola
   let bateu = false;
-  const vBolaAntes = Math.hypot(s.bola.vx, s.bola.vy);
   for (let i = 0; i < 200 && !bateu; i++) {
     passo(s);
-    if (Math.hypot(s.bola.vx, s.bola.vy) > vBolaAntes + 1) bateu = true;
+    if (s.bola.vx > 5) bateu = true; // a bola voou para a direita
   }
-  assert.ok(bateu, 'a bola ganhou velocidade no impacto');
+  assert.ok(bateu, `a bola ganhou velocidade no impacto (vx=${s.bola.vx.toFixed(2)})`);
   assert.ok(Math.hypot(d.vx, d.vy) < 5, `o disco perdeu força no impacto (vx=${d.vx.toFixed(2)})`);
+});
+
+test('a bola RICA num botão parado (restituição 0.8): não morre na frente', () => {
+  const s = estadoInicialFisica();
+  // linha limpa y=60: botão parado em (370,60); bola indo para a ESQUERDA a -6 bate e quica de volta
+  const botao = s.discos.find(d => d.time === 'A' && !d.goleiro);
+  botao.x = 370; botao.y = 60; botao.vx = 0; botao.vy = 0;
+  s.bola.x = 400; s.bola.y = 60; s.bola.vx = -6; s.bola.vy = 0;
+  let quicou = false;
+  for (let i = 0; i < 300 && !quicou; i++) {
+    passo(s);
+    if (s.bola.vx > 2) quicou = true; // voltou para a direita a pelo menos 2
+  }
+  assert.ok(quicou, `a bola ricocheteou no botão parado (vx final ${s.bola.vx.toFixed(2)})`);
+  assert.ok(s.bola.x > 370, `a bola foi empurrada para fora do botão (x=${s.bola.x.toFixed(0)})`);
 });
 
 test('colisão disco-disco: ambos mudam de velocidade', () => {
   const s = estadoInicialFisica();
-  const a = s.discos[0], b = s.discos[10];
-  a.x = LARGURA / 2 - 30; a.y = ALTURA / 2; a.vx = 8; a.vy = 0;
-  b.x = LARGURA / 2 + 10; b.y = ALTURA / 2; b.vx = 0; b.vy = 0;
-  const vAntes = Math.hypot(b.vx, b.vy);
+  // linha limpa y=60: dois zagueiros longe de qualquer outro disco
+  const a = s.discos.find(d => d.time === 'A' && !d.goleiro);
+  const b = s.discos.find(d => d.time === 'B' && !d.goleiro);
+  a.x = 340; a.y = 60; a.vx = 8; a.vy = 0;
+  b.x = 400; b.y = 60; b.vx = 0; b.vy = 0;
+  const vAntes = 0;
   for (let i = 0; i < 100 && vAntes === Math.hypot(b.vx, b.vy); i++) passo(s);
-  assert.ok(Math.hypot(b.vx, b.vy) > 0, 'o disco B ganhou velocidade na colisão');
+  assert.ok(Math.hypot(b.vx, b.vy) > 0, `o disco B ganhou velocidade na colisão (vx=${b.vx.toFixed(2)})`);
 });
 
 test('parado(): true quando tudo parado, false quando algo em movimento', () => {
