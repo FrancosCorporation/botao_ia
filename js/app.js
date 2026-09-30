@@ -3,11 +3,58 @@
 
 import { estadoInicialFisica, passo, parado, reposicionaBola, toque, LARGURA, ALTURA, GOL_Y0, GOL_Y1 } from './fisica.js';
 import { escolheLanceIA, aplicaLance } from './ia.js';
+import { escolheViaLLM, carregaWebLLM, placaWebGPU, PADRAO as LLM_PADRAO } from './llm.js';
 
 const $canvas = document.getElementById('campo');
 const $status = document.getElementById('status');
 const $selModo = document.getElementById('modo');
-let modo = 'medio'; // facil | medio | dificil
+const $llmBox = document.getElementById('llm-box');
+const $llmModelo = document.getElementById('llm-modelo');
+const $llmCarregar = document.getElementById('llm-carregar');
+const $llmStatus = document.getElementById('llm-status');
+let modo = 'medio'; // facil | medio | dificil | llm
+
+function cfgLLM() {
+  return { modelo: $llmModelo.value || LLM_PADRAO.modelo };
+}
+function salvaCfgLLM() {
+  try { localStorage.setItem('botao-llm', JSON.stringify({ modelo: $llmModelo.value })); } catch {}
+}
+try { // recupera o que tava salvo
+  const s = JSON.parse(localStorage.getItem('botao-llm') || '{}');
+  if (s.modelo) $llmModelo.value = s.modelo;
+} catch {}
+function sincronizaPainelLLM() {
+  $llmBox.hidden = modo !== 'llm';
+}
+// carrega o modelo NA PLACA do jogador (1ª vez baixa ~350MB e fica no cache; depois é 100% local)
+async function carregaModeloLLM() {
+  const placa = await placaWebGPU();
+  if (!placa) {
+    $llmStatus.textContent = '⚠ WebGPU desligado — ative UMA vez: chrome://flags/#enable-unsafe-webgpu → Enabled → reabra o navegador (fica pra sempre). Funciona até SEM placa de vídeo: roda na CPU (SwiftShader)';
+    return;
+  }
+  $llmStatus.textContent = 'placa ' + placa.vendor + (placa.arquitetura ? '/' + placa.arquitetura : '') + ' — preparando… 0%';
+  try {
+    await carregaWebLLM(cfgLLM().modelo, p => {
+      $llmStatus.textContent = 'baixando modelo… ' + Math.round(p * 100) + '%';
+    });
+    $llmStatus.textContent = '✔ modelo pronto na placa (' + placa.vendor + ') — roda 100% local';
+  } catch (e) {
+    $llmStatus.textContent = '⚠ ' + (e && e.message ? e.message : e);
+  }
+}
+$llmCarregar.addEventListener('click', carregaModeloLLM);
+$llmModelo.addEventListener('change', () => { salvaCfgLLM(); if (modo === 'llm') carregaModeloLLM(); });
+// ⚠️ o listener do select faltava (o jogo trocava de modo mas o JS ficava em 'médio'!)
+$selModo.addEventListener('change', () => {
+  modo = $selModo.value;
+  sincronizaPainelLLM();
+  if (modo === 'llm') carregaModeloLLM(); // começa a baixar o modelo já, no ato de escolher o modo
+  else $llmStatus.textContent = '';
+  reinicia();
+});
+sincronizaPainelLLM();
 const $placar = document.getElementById('placar');
 const $reiniciar = document.getElementById('reiniciar');
 const ctx2d = $canvas.getContext('2d');
@@ -118,7 +165,7 @@ function rodaFisica() {
       fase = 'ia';
       lancesIAFeitos = 0;
       movidosIA = []; // cada turno começa limpo (regra: não repetir botão)
-      const rotulo = modo === 'facil' ? 'fácil' : modo === 'dificil' ? 'DIFÍCIL' : 'média';
+      const rotulo = modo === 'facil' ? 'fácil' : modo === 'dificil' ? 'DIFÍCIL' : modo === 'llm' ? 'LLM' : 'média';
       avisa('Turno da IA (' + rotulo + ')...');
       setTimeout(lanceDaIA, 700);
     }
@@ -135,6 +182,37 @@ const INTENCAO = {
 
 function lanceDaIA() {
   if (esperandoFisica) return;
+
+  // ===== MODO LLM: o modelo escolhe entre os candidatos que a física já simulou =====
+  if (modo === 'llm') {
+    const n = lancesIAFeitos + 1;
+    avisa('IA LLM pensando… (lance ' + n + '/3)');
+    escolheViaLLM(estado, movidosIA, { lance: n }, cfgLLM(), {
+      progresso: p => { $llmStatus.textContent = 'baixando modelo… ' + Math.round(p * 100) + '%'; },
+    }).then(r => {
+      if (fase !== 'ia' || esperandoFisica) return; // turno cancelado/reiniciado no meio
+      let lance = r.lance;
+      let rotulo;
+      if (r.origem === 'llm') {
+        rotulo = 'IA LLM: ' + r.motivo;
+      } else {
+        lance = lance || escolheLanceIA(estado, movidosIA, 'dificil'); // fallback: heurística joga
+        rotulo = 'LLM fora — ' + r.motivo;
+      }
+      if (!lance) {
+        lancesIAFeitos++;
+        if (lancesIAFeitos < 3) setTimeout(lanceDaIA, 300);
+        else { lancesIAFeitos = 0; fase = 'humano'; lancesRestantes = 3; movidosHumano = []; avisa('Seu turno: 3 lances'); }
+        return;
+      }
+      aplicaLance(estado, lance);
+      movidosIA.push(lance.disco);
+      esperandoFisica = true;
+      avisa(rotulo + ' (lance ' + n + '/3)');
+    });
+    return;
+  }
+
   const lance = escolheLanceIA(estado, movidosIA, modo);
   if (lance) {
     aplicaLance(estado, lance); // impulso proporcional: chega na bola / para no alvo
@@ -205,7 +283,7 @@ window.addEventListener('mouseup', (e) => {
   }
 });
 
-$reiniciar.addEventListener('click', () => {
+function reinicia() {
   estado = estadoInicialFisica();
   fase = 'humano';
   lancesRestantes = 3;
@@ -217,7 +295,8 @@ $reiniciar.addEventListener('click', () => {
   esperandoFisica = false;
   pintaPlacar();
   avisa('Jogo novo: seu turno — 3 lances');
-});
+}
+$reiniciar.addEventListener('click', reinicia);
 
 function loop() {
   if (esperandoFisica) rodaFisica();

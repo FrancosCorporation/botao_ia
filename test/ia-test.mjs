@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { estadoInicialFisica, toque, passo, parado, LARGURA, GOL_Y0, GOL_Y1 } from '../js/fisica.js';
-import { lanceIA, turnoIA, aplicaLance, escolheLanceIA } from '../js/ia.js';
+import { lanceIA, turnoIA, aplicaLance, escolheLanceIA, candidatosAvaliados } from '../js/ia.js';
 
 test('goleiro segue a bola na vertical (o lance aponta para a posição da bola)', () => {
   const s = estadoInicialFisica();
@@ -247,4 +247,16 @@ test('IA sai andando em direção ao gol: com bola no meio, o 1º lance é de AT
   assert.ok(lances.length > 0, 'tem lances');
   assert.notEqual(lances[0].tipo, 'goleiro', 'primeiro lance não é goleiro');
   assert.ok(['chute', 'posicao', 'bloqueio'].includes(lances[0].tipo), 'ataque/defesa ativa: ' + lances[0].tipo);
+});
+
+test('candidatosAvaliados: menu NUNCA fica vazio (fallback = ir pra trás da bola)', () => {
+  const s = estadoInicialFisica();
+  // bola longe de todo mundo e meus discos todos no canto → nenhum critério normal bate
+  s.bola.x = 100; s.bola.y = 250;
+  let k = 0;
+  for (const d of s.discos) if (d.time === 'B' && !d.goleiro) { d.x = 780; d.y = 60 + (k++) * 30; }
+  const cands = candidatosAvaliados(s, []);
+  assert.ok(cands.length >= 1, 'pelo menos 1 candidato (o LLM nunca fica sem opção)');
+  assert.equal(cands[0].tipo, 'posicao', 'fallback é posicionamento atrás da bola');
+  assert.ok(Number.isFinite(cands[0].score), 'candidato do fallback também é simulado');
 });

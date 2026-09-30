@@ -22,23 +22,53 @@ Eu queria jogar futebol de botão no navegador — aquele jogo clássico dos bot
 - **Regra clássica dos 3 lances**: cada turno dá direito a 3 lances, SEM repetir o mesmo botão (vale para os dois times)
 - **Formação 2-4-2-1** (1 goleiro + 9 de linha) sem botão na linha do centro — a bola começa livre, sem sanduíche
 - **Controle por flick**: clica no botão vermelho, arrasta na direção e solta
+- **Modo LLM: a IA de verdade roda DENTRO do navegador** (separado abaixo)
+
+## Modo LLM — inteligência artificial local, sem servidor
+
+Escolha "LLM (roda no navegador)" no seletor IA. Aí o jogo para de usar a heurística e passa a
+chamar uma **LLM de verdade** — mas tudo rodando na sua própria máquina:
+
+- **Zero servidor, zero API**: a biblioteca WebLLM está embutida no repositório
+  (`js/vendor/webllm.esm.js`) e o modelo (Qwen2.5-0.5B, ~350MB) é baixado **uma única vez**
+  pelo navegador, fica no cache local e a inferência acontece via **WebGPU** na sua
+  placa de vídeo. Depois do primeiro download, joga 100% offline.
+- **O LLM não inventa jogada**: o jogo manda pra ele o menu de candidatos que a FÍSICA já
+  simulou (com o score de cada um: gol = +100000, gol contra = −100000) e ele escolhe UM —
+  respondendo `{"i": <nº>, "motivo": "<frase em pt-BR>"}`. Resposta fora do menu, JSON torto
+  ou erro de WebGPU → uma segunda tentativa com o limite explícito e, se ainda assim falhar,
+  **a heurística clássica assume** (o jogo nunca trava).
+- **Modelo testado à mão**: o Qwen2.5-0.5B-Instruct (64,5 tok/s na GPU, JSON perfeito) e o
+  SmolLM2-360M (mais leve) ficam disponíveis no painel; o Qwen3-0.6B foi testado e DESCARTADO
+  (gasta tokens "pensando" e não obedece o JSON).
+- **Funciona até SEM placa de vídeo**: se o navegador não achar a GPU, o WebGPU cai no
+  SwiftShader (software, na CPU). O único requisito é **ativar o WebGPU uma vez** — e fica
+  pra sempre:
+  1. abra `chrome://flags/#enable-unsafe-webgpu` (no Brave: `brave://flags/#enable-unsafe-webgpu`)
+  2. ponha **Enabled** e clique em **Relaunch** (reabra o navegador)
+  3. recarregue o jogo — pronto, o painel mostra a placa e o modelo carrega
+  Com GPU AMD/Intel/Nova que suporta Vulkan, o Chrome usa a placa direto (~64 tok/s no Qwen2.5-0.5B);
+  sem placa, roda na CPU mesmo.
 
 ## Como rodar
 
 ```bash
 npm start          # sobe o servidor estático em http://localhost:3345
-npm test           # 17 testes da física + da IA (node --test)
+npm test           # 47 testes: física + IA heurística + LLM (node --test)
 ```
 
 **Jogue online agora**: https://francoscorporation.github.io/botao_ia/ — o jogo é 100% estático (servidor só serve arquivos). Para rodar local use `npm start` (abrir o index.html direto via file:// não carrega os módulos ES do navegador).
 
 ## Como foi testado
 
-22 testes automatizados (node --test) cobrindo a física e a IA, todos passando, + partida real no browser verificando o GOL da IA:
+47 testes automatizados (node --test) cobrindo a física, a IA heurística e o modo LLM, todos passando, + partidas reais no browser:
 
 - **Física (11)**: formação com 10 discos por time (1 goleiro + 9) · toque com impulso normalizado · a bola desacelera até parar · a parede rebate · gol dentro da abertura (placar incrementa) · reposicionaBola no centro · colisão disco-bola (a bola voa, o botão amortece) · **a bola RICA num botão parado a 80% (restituição)** · colisão disco-disco (ambos mudam) · parado() · o goleiro para mais rápido
-- **IA (11)**: o goleiro segue a bola na vertical · chuta ao gol · bloqueia quando o adversário ameaça · 3 lances por turno sem repetir disco · sem lance disponível devolve null · o lance aplica velocidade · **impulso proporcional do chute** (chega na bola com força, não atravessa) · **posicionamento para no alvo** (não atravessa o campo) · **disco desalinhado NUNCA chuta de lado** (posiciona) · **o chute mira a própria bola**
-- **Partida real no browser**: turno do humano + turno da IA → "IA CHUTA pro gol!" → **GOL da IA** (placar 0×1) — verificado também no modo Difícil (a bola levada até x=159 e gol; o turno difícil simulado roda em ~114ms)
+- **IA heurística (11)**: o goleiro segue a bola na vertical · chuta ao gol · bloqueia quando o adversário ameaça · 3 lances por turno sem repetir disco · sem lance disponível devolve null · o lance aplica velocidade · **impulso proporcional do chute** (chega na bola com força, não atravessa) · **posicionamento para no alvo** (não atravessa o campo) · **disco desalinhado NUNCA chuta de lado** (posiciona) · **o chute mira a própria bola**
+- **Modos de dificuldade (3)**: fácil/médio/difícil mudam o comportamento de verdade (o listener do select também foi testado — ele faltava e todo "difícil" jogava como médio)
+- **Modo LLM (13)**: prompt com estado + candidatos + limites · extração de JSON (puro, em ``` e com chave `}}` extra) · validação só aceita índice dentro do menu · retry na 2ª tentativa · fallback heurístico em qualquer falha · **o lance do LLM é SEMPRE um candidato simulado da física** (nunca inventa coordenada) · menu nunca fica vazio (fallback = ir pra trás da bola)
+- **Partida real no browser (WebLLM)**: modo LLM ligado, Qwen2.5-0.5B carregado via WebGPU na GPU AMD (amd/rdna-2, 64,5 tok/s) e **3 lances seguidos escolhidos pelo modelo local** com motivo em pt-BR ("IA LLM: chute botao#17 ... score +815" → +924 → +1100 — escolhendo os melhores scores)
+- **Partida real no browser (heurística)**: turno do humano + turno da IA → "IA CHUTA pro gol!" → **GOL da IA** (placar 0×1) — verificado também no modo Difícil (a bola levada até x=159 e gol; o turno difícil simulado roda em ~114ms)
 
 Quatro bugs reais encontrados e corrigidos pelos próprios testes e pelo browser: o canvas escalado (clique não achava o disco), a colisão INELÁSTICA (a bola morria na frente de qualquer botão parado — não marcava gol nunca), os lances com força total (todo botão atravessava o campo, parecendo aleatório) e a formação com botões sanduíchando a bola no centro (todo chute ricocheteia na hora).
 
@@ -51,11 +81,15 @@ botao_ia/
 ├── server.js          # servidor estático (sem build)
 ├── js/
 │   ├── fisica.js      # física: discos, bola, atrito, colisões, paredes, gols
-│   ├── ia.js          # IA heurística: goleiro, chute, bloqueio, posicionamento
-│   └── app.js         # UI: canvas, flick por clique-arrasto, placar, turnos
+│   ├── ia.js          # IA heurística: goleiro, chute, bloqueio, posicionamento + candidatos pro LLM
+│   ├── llm.js         # modo LLM: prompt, validação de JSON, motor WebLLM, fallback
+│   ├── vendor/
+│   │   └── webllm.esm.js  # WebLLM embutido (5,8MB) — sem CDN, sem linha de rede pro código
+│   └── app.js         # UI: canvas, flick por clique-arrasto, placar, turnos, painel do LLM
 └── test/
     ├── fisica-test.mjs
-    └── ia-test.mjs
+    ├── ia-test.mjs
+    └── llm-test.mjs
 ```
 
 ## Sobre a série

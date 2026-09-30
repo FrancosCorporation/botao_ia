@@ -14,13 +14,23 @@
       <option value="facil">Fácil</option>
       <option value="medio" selected>Médio</option>
       <option value="dificil">Difícil</option>
+      <option value="llm">LLM (roda no navegador)</option>
     </select>
     <button id="reiniciar" type="button">Reiniciar</button>
+  </div>
+  <div id="llm-box" hidden>
+    <label for="llm-modelo">Modelo:</label>
+    <select id="llm-modelo">
+      <option value="Qwen2.5-0.5B-Instruct-q4f16_1-MLC" selected>Qwen2.5-0.5B — padrão (~350MB, na sua placa)</option>
+      <option value="SmolLM2-360M-Instruct-q4f16_1-MLC">SmolLM2-360M — leve (~250MB, instantâneo)</option>
+    </select>
+    <button id="llm-carregar" type="button">Carregar modelo</button>
+    <span id="llm-status"></span>
   </div>
   <div id="status">Seu turno: 3 lances</div>
   <canvas id="campo" width="800" height="500" aria-label="Campo de futebol de botão"></canvas>
   <div id="placar">Você 0 × 0 IA</div>
-  <div id="rodape">Clique num botão vermelho e arraste para dar o lance · Fácil erra a mira · Médio joga por objetivo · <strong>Difícil simula cada lance na física</strong> (vê ricochetes, evita gol contra) · 3 lances por turno · FrancosCorporation</div>
+  <div id="rodape">Clique num botão vermelho e arraste para dar o lance · Fácil erra a mira · Médio joga por objetivo · Difícil simula cada lance na física · <strong>LLM: a IA roda DENTRO do navegador na sua placa de vídeo (WebGPU) — baixa o modelo 1ª vez, depois 100% offline</strong> (se o WebGPU faltar, a heurística joga) · 3 lances por turno · FrancosCorporation</div>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

@@ -40,11 +40,15 @@ export function lanceIA(estado, movidosNoTurno = []) {
   const meus = discos.filter(d => d.time === 'B' && !d.goleiro && !movidosNoTurno.includes(d));
 
   // 0) GOLEIRO: só defende quando a bola está no NOSSO campo —
-  //    se a bola tá no campo de ataque, o goleiro NÃO gasta lance (ataque acima de tudo)
+  //    e só mexe com corrida de VERDADE (>=40px): micromovimento de 12px não gasta lance.
+  //    Exceção: zona de perigo (bola perto do nosso gol) → ajuste fino de 14px é defesa legítima.
   if (goleiro && nossoCampo && !movidosNoTurno.includes(goleiro)) {
     const alvoY = clamp(bola.y, GOL_Y0 + 18, GOL_Y1 - 18);
-    if (Math.abs(goleiro.y - alvoY) > 12 || Math.abs(goleiro.x - (LARGURA - 90)) > 20) {
-      return { disco: goleiro, alvoX: LARGURA - 90, alvoY, tipo: 'goleiro' };
+    const tx = LARGURA - 90;
+    const corrida = Math.hypot(goleiro.x - tx, goleiro.y - alvoY);
+    const perigo = bola.x > LARGURA - 300;
+    if (corrida >= 40 || (perigo && corrida >= 14)) {
+      return { disco: goleiro, alvoX: tx, alvoY, tipo: 'goleiro' };
     }
   }
 
@@ -68,7 +72,7 @@ export function lanceIA(estado, movidosNoTurno = []) {
   for (const d of meus) {
     const dist = hip(d, bola);
     const cos = alinhamento(d, bola, GOL_A);
-    if (dist > 8 && dist < 320 && cos > 0.55) {
+    if (dist > 8 && dist < 320 && cos > 0.45) { // 0.45: toca a bola mais (intenção), sem chute de costas
       const s = cos * 2 - dist / 320; // mais alinhado e mais perto ganha
       if (s > melhorS) { melhorS = s; melhor = d; }
     }
@@ -98,8 +102,8 @@ export function lanceIA(estado, movidosNoTurno = []) {
     const c = hip(d, ponto);
     if (c < menor) { menor = c; proximo = d; }
   }
-  if (proximo) return { disco: proximo, alvoX: ponto.x, alvoY: ponto.y, tipo: 'posicao' };
-  return null;
+  if (proximo && menor >= 40) return { disco: proximo, alvoX: ponto.x, alvoY: ponto.y, tipo: 'posicao' };
+  return null; // todo mundo já cobrindo o ponto → não gasta lance à toa
 }
 
 // aplica o lance com impulso PROPORCIONAL à distância:
@@ -139,9 +143,21 @@ export function turnoIA(estado, aplica = aplicaLance, dificuldade = 'medio') {
 // ============================================================================
 
 export function escolheLanceIA(estado, movidos = [], dificuldade = 'medio') {
-  if (dificuldade === 'facil') return lanceFacil(estado, movidos);
-  if (dificuldade === 'dificil') return lanceDificil(estado, movidos);
-  return lanceIA(estado, movidos);
+  const l = dificuldade === 'facil' ? lanceFacil(estado, movidos)
+    : dificuldade === 'dificil' ? lanceDificil(estado, movidos)
+    : lanceIA(estado, movidos);
+  return garanteCorrida(l);
+}
+
+// rede de segurança: NENHUM lance não-chute percorre menos de 40px ("mexer um pouquinho")
+// (goleiro fica de fora: ele tem regra própria de distância)
+function garanteCorrida(lance) {
+  if (!lance || lance.tipo === 'chute' || lance.tipo === 'goleiro') return lance;
+  const dx = lance.alvoX - lance.disco.x, dy = lance.alvoY - lance.disco.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist >= 40 || dist < 1) return lance;
+  const k = 40 / dist;
+  return { ...lance, alvoX: lance.disco.x + dx * k, alvoY: lance.disco.y + dy * k };
 }
 
 // --- FÁCIL: joga com erro ---------------------------------------------------
@@ -231,8 +247,9 @@ function candidatosLance(estado, movidos) {
   // goleiro: só quando a bola está no NOSSO campo (ataque acima de tudo)
   const gIdx = discos.findIndex(d => d.time === 'B' && d.goleiro);
   const g = discos[gIdx];
-  if (!movidos.includes(g) && nossoCampo
-      && (Math.abs(g.y - alvoY) > 14 || Math.abs(g.x - (LARGURA - 90)) > 20)) {
+  const corridaG = Math.hypot(g.x - (LARGURA - 90), g.y - alvoY);
+  const perigoG = bola.x > LARGURA - 300;
+  if (!movidos.includes(g) && nossoCampo && (corridaG >= 40 || (perigoG && corridaG >= 14))) {
     out.push({ idx: gIdx, disco: g, alvoX: LARGURA - 90, alvoY, tipo: 'goleiro' });
   }
 
@@ -279,7 +296,27 @@ function candidatosLance(estado, movidos) {
   const pos = [...mapa.values()].sort((a, b) => a.dist - b.dist).slice(0, 3);
   for (const { dist, ...c } of pos) out.push(c);
 
+  // 5) fallback igual ao passo 4 da heurística: o menu NUNCA pode ficar vazio
+  //    (o modo LLM precisa de pelo menos 1 candidato — o mais perto vai pra trás da bola)
+  if (!out.length) {
+    const ponto = pontoDeChute(bola, GOL_A, 40);
+    let escolhido = null, menor = Infinity;
+    for (const { d, i } of meus) {
+      const c = hip(d, ponto);
+      if (c < menor) { menor = c; escolhido = { idx: i, disco: d }; }
+    }
+    if (escolhido && menor >= 40) {
+      out.push({ idx: escolhido.idx, disco: escolhido.disco, alvoX: ponto.x, alvoY: ponto.y, tipo: 'posicao' });
+    }
+  }
+
   return out;
+}
+
+// candidatos com a AVALIAÇÃO da simulação — é o menu que o LLM (modo LLM) recebe pra escolher
+export function candidatosAvaliados(estado, movidos) {
+  return candidatosLance(estado, movidos)
+    .map(c => ({ idx: c.idx, tipo: c.tipo, alvoX: c.alvoX, alvoY: c.alvoY, score: simulaLance(estado, c) }));
 }
 
 function lanceDificil(estado, movidos) {

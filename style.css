@@ -20,3 +20,14 @@ button:hover { background: #35354a; }
 #campo { border: 3px solid #444; border-radius: 6px; max-width: 96vw; height: auto; cursor: crosshair; }
 #placar { font-size: 1.1rem; color: #9ad1ff; margin-top: 12px; }
 #rodape { margin-top: 10px; color: #888; font-size: 0.85rem; text-align: center; }
+#llm-box {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+  background: #26263a; border: 1px solid #3c3c55; border-radius: 8px;
+  padding: 8px 14px; margin-bottom: 12px; font-size: 0.9rem; max-width: 96vw;
+}
+#llm-box label { color: #9ad1ff; }
+#llm-box select {
+  background: #2a2a3a; color: #eee; border: 1px solid #444; border-radius: 6px;
+  padding: 5px 8px; font-size: 0.9rem; max-width: min(420px, 70vw);
+}
+#llm-status { color: #ffd166; font-size: 0.85rem; min-width: 120px; }
