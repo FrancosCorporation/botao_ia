@@ -1,8 +1,8 @@
 // Testes da IA do futebol de botão: goleiro segue a bola, chuta ao gol, bloqueia, 3 lances sem repetir.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estadoInicialFisica, toque, passo, LARGURA, GOL_Y0, GOL_Y1 } from '../js/fisica.js';
-import { lanceIA, turnoIA, aplicaLance } from '../js/ia.js';
+import { estadoInicialFisica, toque, passo, parado, LARGURA, GOL_Y0, GOL_Y1 } from '../js/fisica.js';
+import { lanceIA, turnoIA, aplicaLance, escolheLanceIA } from '../js/ia.js';
 
 test('goleiro segue a bola na vertical (o lance aponta para a posição da bola)', () => {
   const s = estadoInicialFisica();
@@ -117,4 +117,81 @@ test('IA chuta NA bola: o alvo do chute é a própria bola', () => {
   assert.equal(lance.tipo, 'chute', 'é chute');
   assert.equal(lance.alvoX, 60, 'mira a bola (x)');
   assert.equal(lance.alvoY, 250, 'mira a bola (y)');
+});
+
+
+// ===== MODOS DE DIFICULDADE ==================================================
+
+test('modo FACIL: devolve lance de um botao meu (pode ser frouxo, mas e dos nossos)', () => {
+  const s = estadoInicialFisica();
+  const lance = escolheLanceIA(s, [], 'facil');
+  assert.ok(lance, 'lance devolvido');
+  assert.equal(lance.disco.time, 'B', 'e um botao da IA');
+});
+
+test('modo FACIL: a mira erra (na media metade dos chutes sai torto)', () => {
+  let erros = 0;
+  for (let i = 0; i < 20; i++) {
+    const s = estadoInicialFisica();
+    const disco = s.discos.find(d => d.time === 'B' && !d.goleiro);
+    disco.x = 200; disco.y = 250;
+    s.bola.x = 60; s.bola.y = 250;
+    const goleiro = s.discos.find(d => d.time === 'B' && d.goleiro);
+    const lance = escolheLanceIA(s, [goleiro], 'facil');
+    if (!lance) continue;
+    if (lance.tipo !== 'chute' || lance.alvoX !== 60 || lance.alvoY !== 250) erros++;
+  }
+  assert.ok(erros >= 8, 'a IA facil erra a mira (errou ' + erros + '/20)');
+});
+
+test('modo MEDIO: a heuristica pura — chuta certeiro na bola alinhada', () => {
+  const s = estadoInicialFisica();
+  const disco = s.discos.find(d => d.time === 'B' && !d.goleiro);
+  disco.x = 200; disco.y = 250;
+  s.bola.x = 60; s.bola.y = 250;
+  const goleiro = s.discos.find(d => d.time === 'B' && d.goleiro);
+  const lance = escolheLanceIA(s, [goleiro], 'medio');
+  assert.equal(lance.tipo, 'chute', 'chuta');
+  assert.equal(lance.alvoX, 60, 'mira exatamente a bola');
+  assert.equal(lance.alvoY, 250, 'mira exatamente a bola (y)');
+});
+
+test('modo DIFICIL: simula e escolhe o chute que leva a bola ao gol', () => {
+  const s = estadoInicialFisica();
+  const disco = s.discos.find(d => d.time === 'B' && !d.goleiro);
+  disco.x = 200; disco.y = 250;
+  s.bola.x = 60; s.bola.y = 250;
+  const goleiro = s.discos.find(d => d.time === 'B' && d.goleiro);
+  const lance = escolheLanceIA(s, [goleiro], 'dificil');
+  assert.equal(lance.tipo, 'chute', 'o dificil escolhe o chute (a simulacao ve o gol)');
+  assert.equal(lance.alvoX, 60, 'mira a bola');
+});
+
+test('modo DIFICIL: NAO faz gol contra — lance suicida na frente do nosso gol e rejeitado', () => {
+  const s = estadoInicialFisica();
+  const disco = s.discos.find(d => d.time === 'B' && !d.goleiro);
+  disco.x = 700; disco.y = 250;
+  s.bola.x = 760; s.bola.y = 250;
+  const lance = escolheLanceIA(s, [], 'dificil');
+  assert.ok(lance, 'lance devolvido');
+  const clone = { discos: s.discos.map(d => ({ ...d })), bola: { ...s.bola }, golA: 0, golB: 0 };
+  const dC = clone.discos.find(d => d.x === lance.disco.x && d.y === lance.disco.y && d.time === lance.disco.time);
+  const dx = lance.alvoX - dC.x, dy = lance.alvoY - dC.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const v0 = lance.tipo === 'chute' ? Math.min(9, dist / 40 + 4.2) : Math.min(9, Math.max(0.6, dist / 40 + 0.35));
+  dC.vx = (dx / dist) * v0; dC.vy = (dy / dist) * v0;
+  let gol = null;
+  for (let i = 0; i < 900 && !gol && !parado(clone); i++) {
+    const r = passo(clone);
+    if (r.gol) gol = r.gol;
+  }
+  assert.notEqual(gol, 'A', 'o dificil NAO empurra a bola pro proprio gol (escolheu: ' + lance.tipo + ')');
+});
+
+test('performance: turno DIFICIL completo (3 lances simulados) em menos de 5s', () => {
+  const s = estadoInicialFisica();
+  const t0 = Date.now();
+  turnoIA(s, aplicaLance, 'dificil');
+  const dt = Date.now() - t0;
+  assert.ok(dt < 5000, 'turno dificil levou ' + dt + 'ms (< 5000ms)');
 });

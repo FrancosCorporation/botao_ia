@@ -9,12 +9,18 @@
 <body>
   <h1>Futebol de Botão com IA</h1>
   <div id="barra">
-    <div id="status">Seu turno: 3 lances</div>
+    <label for="modo">IA:</label>
+    <select id="modo">
+      <option value="facil">Fácil</option>
+      <option value="medio" selected>Médio</option>
+      <option value="dificil">Difícil</option>
+    </select>
     <button id="reiniciar" type="button">Reiniciar</button>
   </div>
+  <div id="status">Seu turno: 3 lances</div>
   <canvas id="campo" width="800" height="500" aria-label="Campo de futebol de botão"></canvas>
   <div id="placar">Você 0 × 0 IA</div>
-  <div id="rodape">Clique num botão vermelho e arraste para dar o lance · IA heurística rodando no browser · 3 lances por turno · FrancosCorporation</div>
+  <div id="rodape">Clique num botão vermelho e arraste para dar o lance · Fácil erra a mira · Médio joga por objetivo · <strong>Difícil simula cada lance na física</strong> (vê ricochetes, evita gol contra) · 3 lances por turno · FrancosCorporation</div>
   <script type="module" src="js/app.js"></script>
 </body>
 </html>

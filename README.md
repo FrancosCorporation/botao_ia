@@ -4,6 +4,10 @@ Eu queria jogar futebol de botão no navegador — aquele jogo clássico dos bot
 
 ## O que tem
 
+- **3 modos de dificuldade**:
+  - **Fácil** — joga com erro de mira (±20° nos chutes, posicionamento torto) e 35% dos lances são frouxos
+  - **Médio** — a heurística pura (fila de objetivo: goleiro → chuta → bloqueia → posiciona)
+  - **Difícil** — **simula cada lance candidato na física** (clone do estado + roda até parar ou gol) e escolhe o de melhor resultado: vê ricochetes, escolhe a tacada que mais aproxima a bola do gol e **nunca faz gol contra** (a simulação rejeita o lance suicida com −100000)
 - **Física própria com bola VIVA**: colisão disco-bola ELÁSTICA (restituição 0.8 — a bola quica nos botões em vez de morrer na frente), colisões disco-disco elásticas, paredes que rebatem e gols com abertura real nas laterais
 - **IA 100% focada no objetivo: fazer o gol** (heurística geométrica, sem LLM): cada lance segue a fila 1) goleiro acompanha a bola no eixo do gol · 2) **CHUTA pro gol** o disco melhor alinhado atrás da bola (cosseno bola→gol > 0.55) · 3) bloqueia a linha quando o adversário ameaça · 4) **posiciona o disco mais perto do PONTO DE CHUTE** (atrás da bola, alinhado bola→gol) · 5) avança até a bola. A intenção de cada lance aparece no placar de status ("IA CHUTA pro gol!")
 - **Impulso PROPORCIONAL à distância** (IA e humano): o arrasto é a distância que o botão vai andar — arrasto curto = toque de efeito, arrasto longo = força máxima; a IA chega na bola com força de sobra (o chute voa pro gol) e para no alvo quando posiciona
@@ -26,7 +30,7 @@ npm test           # 17 testes da física + da IA (node --test)
 
 - **Física (11)**: formação com 10 discos por time (1 goleiro + 9) · toque com impulso normalizado · a bola desacelera até parar · a parede rebate · gol dentro da abertura (placar incrementa) · reposicionaBola no centro · colisão disco-bola (a bola voa, o botão amortece) · **a bola RICA num botão parado a 80% (restituição)** · colisão disco-disco (ambos mudam) · parado() · o goleiro para mais rápido
 - **IA (11)**: o goleiro segue a bola na vertical · chuta ao gol · bloqueia quando o adversário ameaça · 3 lances por turno sem repetir disco · sem lance disponível devolve null · o lance aplica velocidade · **impulso proporcional do chute** (chega na bola com força, não atravessa) · **posicionamento para no alvo** (não atravessa o campo) · **disco desalinhado NUNCA chuta de lado** (posiciona) · **o chute mira a própria bola**
-- **Partida real no browser**: turno do humano + turno da IA → "IA CHUTA pro gol!" → **GOL da IA** (placar 0×1)
+- **Partida real no browser**: turno do humano + turno da IA → "IA CHUTA pro gol!" → **GOL da IA** (placar 0×1) — verificado também no modo Difícil (a bola levada até x=159 e gol; o turno difícil simulado roda em ~114ms)
 
 Quatro bugs reais encontrados e corrigidos pelos próprios testes e pelo browser: o canvas escalado (clique não achava o disco), a colisão INELÁSTICA (a bola morria na frente de qualquer botão parado — não marcava gol nunca), os lances com força total (todo botão atravessava o campo, parecendo aleatório) e a formação com botões sanduíchando a bola no centro (todo chute ricocheteia na hora).
 

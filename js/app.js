@@ -2,10 +2,12 @@
 // O humano é o time A (esquerda, ataca para a direita). A IA é o B. 3 lances por turno.
 
 import { estadoInicialFisica, passo, parado, reposicionaBola, toque, LARGURA, ALTURA, GOL_Y0, GOL_Y1 } from './fisica.js';
-import { lanceIA, aplicaLance } from './ia.js';
+import { escolheLanceIA, aplicaLance } from './ia.js';
 
 const $canvas = document.getElementById('campo');
 const $status = document.getElementById('status');
+const $selModo = document.getElementById('modo');
+let modo = 'medio'; // facil | medio | dificil
 const $placar = document.getElementById('placar');
 const $reiniciar = document.getElementById('reiniciar');
 const ctx2d = $canvas.getContext('2d');
@@ -116,7 +118,8 @@ function rodaFisica() {
       fase = 'ia';
       lancesIAFeitos = 0;
       movidosIA = []; // cada turno começa limpo (regra: não repetir botão)
-      avisa('Turno da IA...');
+      const rotulo = modo === 'facil' ? 'fácil' : modo === 'dificil' ? 'DIFÍCIL' : 'média';
+      avisa('Turno da IA (' + rotulo + ')...');
       setTimeout(lanceDaIA, 700);
     }
   }
@@ -132,7 +135,7 @@ const INTENCAO = {
 
 function lanceDaIA() {
   if (esperandoFisica) return;
-  const lance = lanceIA(estado, movidosIA);
+  const lance = escolheLanceIA(estado, movidosIA, modo);
   if (lance) {
     aplicaLance(estado, lance); // impulso proporcional: chega na bola / para no alvo
     movidosIA.push(lance.disco); // regra dos 3 lances: não repete o botão
