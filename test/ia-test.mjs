@@ -195,3 +195,56 @@ test('performance: turno DIFICIL completo (3 lances simulados) em menos de 5s', 
   const dt = Date.now() - t0;
   assert.ok(dt < 5000, 'turno dificil levou ' + dt + 'ms (< 5000ms)');
 });
+
+
+// ===== RECLAMAÇÕES DO JOGADOR (2026-09-30) ==================================
+// "A IA mexe peças sem intenção de matar a bola / mexe um pouquinho só"
+
+test('IA NUNCA gasta lance com goleiro quando a bola tá no campo de ATQUE', () => {
+  const s = estadoInicialFisica();
+  s.bola.x = 300; s.bola.y = 180;               // campo de ataque da IA
+  const g = s.discos.find(d => d.time === 'B' && d.goleiro);
+  g.y = 60;                                      // goleiro BEM fora do eixo (antes: ia corrigir à toa)
+  const lance = lanceIA(s, []);
+  assert.ok(lance, 'lance devolvido');
+  assert.notEqual(lance.tipo, 'goleiro', 'bola no ataque → NÃO mexe goleiro');
+  assert.ok(lance.tipo === 'chute' || lance.tipo === 'posicao', 'a jogada é ofensiva: ' + lance.tipo);
+});
+
+test('IA difícil também NÃO mexe goleiro no campo de ataque', () => {
+  const s = estadoInicialFisica();
+  s.bola.x = 300; s.bola.y = 180;
+  const g = s.discos.find(d => d.time === 'B' && d.goleiro);
+  g.y = 60;
+  const lance = escolheLanceIA(s, [], 'dificil');
+  assert.ok(lance, 'lance devolvido');
+  assert.notEqual(lance.tipo, 'goleiro', 'simulação também dispensa o goleiro no ataque');
+});
+
+test('NENHUM lance é "mexer um pouquinho": todo lance não-chute percorre 40px+', () => {
+  // cenário 1: todos os meus discos do lado errado → só posicionamento
+  const s = estadoInicialFisica();
+  const meus = s.discos.filter(d => d.time === 'B' && !d.goleiro);
+  meus.forEach((d, i) => { d.x = 350; d.y = 80 + i * 45; }); // todos à esquerda da bola (fora de alinhamento)
+  for (const d of s.discos.filter(d => d.time === 'A')) d.x = 60; // sem ameaça
+  s.bola.x = 400; s.bola.y = 250;
+  for (const modo of ['medio', 'dificil']) {
+    const lances = turnoIA(s, aplicaLance, modo);
+    assert.ok(lances.length >= 1, modo + ': tem lances');
+    for (const l of lances) {
+      const travel = Math.hypot(l.alvoX - l.disco.x, l.alvoY - l.disco.y);
+      if (l.tipo !== 'chute') {
+        assert.ok(travel >= 40, modo + ': lance ' + l.tipo + ' percorreu só ' + travel.toFixed(0) + 'px (mínimo 40)');
+      }
+    }
+  }
+});
+
+test('IA sai andando em direção ao gol: com bola no meio, o 1º lance é de ATAQUE', () => {
+  const s = estadoInicialFisica();
+  s.bola.x = 420; s.bola.y = 250;
+  const lances = turnoIA(s, aplicaLance, 'medio');
+  assert.ok(lances.length > 0, 'tem lances');
+  assert.notEqual(lances[0].tipo, 'goleiro', 'primeiro lance não é goleiro');
+  assert.ok(['chute', 'posicao', 'bloqueio'].includes(lances[0].tipo), 'ataque/defesa ativa: ' + lances[0].tipo);
+});

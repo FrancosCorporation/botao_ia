@@ -9,7 +9,8 @@ export const GOL_Y0 = (ALTURA - GOL_ALTURA) / 2;
 export const GOL_Y1 = (ALTURA + GOL_ALTURA) / 2;
 export const ATRITO_DISCO = 0.975;
 export const ATRITO_BOLA = 0.985;
-export const ATRITO_GOLEIRO = 0.9; // goleiro para mais rápido (fica no eixo)
+export const ATRITO_GOLEIRO = 0.975; // IGUAL aos outros: todo botão rola a MESMA distância
+// (antes era 0.9 — o goleiro andava 4× menos que os outros com o MESMO arrasto: "uns rolam pouco")
 export const IMPULSO = 9;
 export const PARADA = 0.08; // velocidade abaixo disso = parado
 

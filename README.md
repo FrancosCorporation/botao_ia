@@ -4,6 +4,14 @@ Eu queria jogar futebol de botão no navegador — aquele jogo clássico dos bot
 
 ## O que tem
 
+- **Toda jogada da IA tem intenção de matar a bola** (nada de "mexer um pouquinho à toa"):
+  - se tem chance → **chuta na bola** agora
+  - se não tem → **corre pra trás da bola** (ponto de chute, corrida mínima de 40px) pra chutar na próxima
+  - goleiro **só defende quando a bola está no campo defensivo** — no campo de ataque ele não gasta lance
+  - ameaça clara do adversário → interpõe (defesa acima de tudo)
+- **Mesma arrasto = mesma distância em QUALQUER botão**: goleiro e jogador têm o MESMO atrito
+  (antes o goleiro rolando 4× menos que os outros — era a diferença de "uns rolam pouco, outros vão mais longe";
+  as outras diferenças visíveis são colisões: bater na bola/botão/parede faz o botão perder velocidade)
 - **3 modos de dificuldade**:
   - **Fácil** — joga com erro de mira (±20° nos chutes, posicionamento torto) e 35% dos lances são frouxos
   - **Médio** — a heurística pura (fila de objetivo: goleiro → chuta → bloqueia → posiciona)

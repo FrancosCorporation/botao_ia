@@ -132,18 +132,14 @@ test('parado(): true quando tudo parado, false quando algo em movimento', () => 
   assert.equal(parado(s), false, 'a bola em movimento');
 });
 
-test('o goleiro para mais rápido (atrito maior)', () => {
+test('MESMO arrasto = MESMA distância em QUALQUER botão (inclusive goleiro)', () => {
   const s = estadoInicialFisica();
   const g = s.discos.find(d => d.goleiro && d.time === 'A');
   const linha = s.discos.find(d => !d.goleiro && d.time === 'A');
-  g.x = 200; g.y = 100; g.vx = 9; g.vy = 0;
-  linha.x = 200; linha.y = 300; linha.vx = 9; linha.vy = 0;
-  let gParou = false, linhaParou = false;
-  for (let i = 0; i < 600; i++) {
-    passo(s);
-    if (g.vx === 0 && g.vy === 0) gParou = true;
-    if (linha.vx === 0 && linha.vy === 0) linhaParou = true;
-  }
-  assert.ok(gParou && linhaParou, 'ambos param');
-  assert.ok(g.x < linha.x, `o goleiro anda menos (${g.x} < ${linha.x})`);
+  g.x = 200; g.y = 40; g.vx = 9; g.vy = 0;      // corredor livre (sem vizinho colidindo)
+  linha.x = 200; linha.y = 460; linha.vx = 9; linha.vy = 0;
+  for (let i = 0; i < 600; i++) passo(s);
+  assert.ok(g.vx === 0 && linha.vx === 0, 'ambos param');
+  const dif = Math.abs(g.x - linha.x);
+  assert.ok(dif < 5, `goleiro e jogador rolam a MESMA distância (diferença de ${dif.toFixed(1)}px, era ~90px antes)`);
 });

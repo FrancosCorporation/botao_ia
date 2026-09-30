@@ -1,11 +1,11 @@
 // IA do futebol de botão — 100% focada no objetivo: levar a bola ao gol adversário.
 // NÃO é LLM: é um algoritmo heurístico (regras geométricas com prioridade) rodando em JS no browser.
-// Cada lance segue uma fila de decisões:
-//   0) GOLEIRO: no eixo do gol, acompanhando a bola na vertical (defender também é objetivo)
-//   1) CHUTAR: o disco MELHOR alinhado atrás da bola (direção disco→bola aponta pro gol) chuta NA bola
-//   2) BLOQUEAR: adversário alinhado apontando pro nosso gol com a bola no nosso campo → interpõe
-//   3) POSICIONAR: o disco mais perto do PONTO DE CHUTE (atrás da bola, alinhado bola→gol) vai pra lá
-//   4) APROXIMAR: o disco mais perto da bola avança até ela
+// Toda jogada tem INTENÇÃO DE MATAR A BOLA — ou chuta agora, ou corre pra trás da bola pra chutar:
+//   0) GOLEIRO: só quando a bola está no NOSSO campo (fora disso não gasta lance)
+//   1) AMEAÇA: adversário alinhado e perto do nosso gol → interpõe (defesa acima de tudo)
+//   2) CHUTAR: o disco MELHOR alinhado atrás da bola chuta NA bola
+//   3) POSICIONAR: correr pra TRÁS da bola (ponto de chute) — corrida mínima de 40px,
+//      nunca "mexer um pouquinho" à toa
 // O impulso é PROPORCIONAL à distância: posicionamento para no alvo; chute chega na bola com força.
 
 import { toque, passo, parado, GOL_Y0, GOL_Y1, LARGURA } from './fisica.js';
@@ -35,18 +35,35 @@ function pontoDeChute(bola, gol, recuo) {
 
 export function lanceIA(estado, movidosNoTurno = []) {
   const { discos, bola } = estado;
+  const nossoCampo = bola.x > LARGURA * 0.5; // a bola está no NOSSO campo?
   const goleiro = discos.find(d => d.time === 'B' && d.goleiro);
   const meus = discos.filter(d => d.time === 'B' && !d.goleiro && !movidosNoTurno.includes(d));
 
-  // 0) GOLEIRO: no eixo do gol, acompanhando a bola na vertical
-  if (goleiro && !movidosNoTurno.includes(goleiro)) {
+  // 0) GOLEIRO: só defende quando a bola está no NOSSO campo —
+  //    se a bola tá no campo de ataque, o goleiro NÃO gasta lance (ataque acima de tudo)
+  if (goleiro && nossoCampo && !movidosNoTurno.includes(goleiro)) {
     const alvoY = clamp(bola.y, GOL_Y0 + 18, GOL_Y1 - 18);
     if (Math.abs(goleiro.y - alvoY) > 12 || Math.abs(goleiro.x - (LARGURA - 90)) > 20) {
       return { disco: goleiro, alvoX: LARGURA - 90, alvoY, tipo: 'goleiro' };
     }
   }
 
-  // 1) CHUTAR AO GOL: o disco melhor alinhado atrás da bola chuta NA bola
+  // 1) AMEAÇA: adversário alinhado e PERTO do nosso gol → interpõe antes de tudo
+  if (bola.x > LARGURA * 0.55) {
+    const ameaca = discos.some(d => d.time === 'A' && !d.goleiro
+      && hip(d, bola) < 240 && alinhamento(d, bola, GOL_B) > 0.6);
+    if (ameaca) {
+      const ponto = pontoDeChute(bola, GOL_B, -55); // 55px à frente da bola, na linha do nosso gol
+      let escolhido = null, menor = Infinity;
+      for (const d of meus) {
+        const c = hip(d, ponto);
+        if (c > 40 && c < menor) { menor = c; escolhido = d; } // corrida de verdade (mín. 40px)
+      }
+      if (escolhido) return { disco: escolhido, alvoX: ponto.x, alvoY: ponto.y, tipo: 'bloqueio' };
+    }
+  }
+
+  // 2) CHUTAR AO GOL: o disco melhor alinhado atrás da bola chuta NA bola
   let melhor = null, melhorS = -Infinity;
   for (const d of meus) {
     const dist = hip(d, bola);
@@ -58,45 +75,30 @@ export function lanceIA(estado, movidosNoTurno = []) {
   }
   if (melhor) return { disco: melhor, alvoX: bola.x, alvoY: bola.y, tipo: 'chute' };
 
-  // 2) BLOQUEAR: adversário alinhado apontando pro NOSSO gol, bola no nosso campo
-  if (bola.x > LARGURA * 0.55) {
-    const ameaca = discos.some(d => d.time === 'A' && !d.goleiro
-      && hip(d, bola) < 300 && alinhamento(d, bola, GOL_B) > 0.5);
-    if (ameaca) {
-      const ponto = pontoDeChute(bola, GOL_B, -55); // 55px à frente da bola, na linha do nosso gol
-      let escolhido = null, menor = Infinity;
-      for (const d of meus) {
-        const c = hip(d, ponto);
-        if (c < menor) { menor = c; escolhido = d; }
-      }
-      if (escolhido && menor < 340) return { disco: escolhido, alvoX: ponto.x, alvoY: ponto.y, tipo: 'bloqueio' };
-    }
-  }
-
-  // 3) POSICIONAR PRA CHUTAR: o disco mais perto do ponto de chute vai pra lá
-  //    (dois pontos: 40px da bola e 90px — o segundo cobre outro ângulo do gol)
+  // 3) POSICIONAR PRA CHUTAR: correr pra TRÁS da bola (ponto de chute) — nunca "mexer um
+  //    pouquinho": corrida mínima de 40px, senão o disco já está coberto e outro é escolhido
   for (const recuo of [40, 90]) {
     const ponto = pontoDeChute(bola, GOL_A, recuo);
     let escolhido = null, menor = Infinity;
     for (const d of meus) {
-      if (hip(d, ponto) < 15) continue;   // já está no ponto
+      const c = hip(d, ponto);
+      if (c < 40) continue;              // já está no ponto (ou a 40px = coberto)
       const ocupado = discos.some(o => o !== d && o.time === 'B' && hip(o, ponto) < 26);
       if (ocupado) continue;             // outro disco MEU já cobre o ponto
-      const c = hip(d, ponto);
       if (c < menor && c < 340) { menor = c; escolhido = d; }
     }
     if (escolhido) return { disco: escolhido, alvoX: ponto.x, alvoY: ponto.y, tipo: 'posicao' };
   }
 
-  // 4) APROXIMAR: o disco mais perto da bola avança até ela
-  let maisPerto = null, menor = Infinity;
+  // 4) FALLBACK: ninguém alinhado e nenhum ponto livre → o restante mais perto do ponto
+  //    de chute VAI PRA TRÁS DA BOLA (a intenção continua: preparar o chute, não andar à toa)
+  const ponto = pontoDeChute(bola, GOL_A, 40);
+  let proximo = null, menor = Infinity;
   for (const d of meus) {
-    const c = hip(d, bola);
-    if (c < menor) { menor = c; maisPerto = d; }
+    const c = hip(d, ponto);
+    if (c < menor) { menor = c; proximo = d; }
   }
-  if (maisPerto && menor > 40 && menor < 340) {
-    return { disco: maisPerto, alvoX: bola.x, alvoY: bola.y, tipo: 'aproximar' };
-  }
+  if (proximo) return { disco: proximo, alvoX: ponto.x, alvoY: ponto.y, tipo: 'posicao' };
   return null;
 }
 
@@ -224,40 +226,58 @@ function candidatosLance(estado, movidos) {
   const { discos, bola } = estado;
   const out = [];
   const alvoY = clamp(bola.y, GOL_Y0 + 18, GOL_Y1 - 18);
+  const nossoCampo = bola.x > LARGURA * 0.5;
 
-  // goleiro (se precisar acompanhar)
+  // goleiro: só quando a bola está no NOSSO campo (ataque acima de tudo)
   const gIdx = discos.findIndex(d => d.time === 'B' && d.goleiro);
   const g = discos[gIdx];
-  if (!movidos.includes(g) && Math.abs(g.y - alvoY) > 14) {
+  if (!movidos.includes(g) && nossoCampo
+      && (Math.abs(g.y - alvoY) > 14 || Math.abs(g.x - (LARGURA - 90)) > 20)) {
     out.push({ idx: gIdx, disco: g, alvoX: LARGURA - 90, alvoY, tipo: 'goleiro' });
   }
 
   const meus = discos.map((d, i) => ({ d, i }))
     .filter(({ d }) => d.time === 'B' && !d.goleiro && !movidos.includes(d));
 
-  // chutes: todo botão razoavelmente alinhado atrás da bola
-  for (const { d, i } of meus) {
-    const dist = hip(d, bola);
-    if (dist > 8 && dist < 320 && alinhamento(d, bola, GOL_A) > 0.4) {
-      out.push({ idx: i, disco: d, alvoX: bola.x, alvoY: bola.y, tipo: 'chute' });
+  // ameaça → interpôr na linha do nosso gol (defesa acima de tudo; a simulação decide)
+  if (bola.x > LARGURA * 0.55) {
+    const ameaca = discos.some(d => d.time === 'A' && !d.goleiro
+      && hip(d, bola) < 240 && alinhamento(d, bola, GOL_B) > 0.6);
+    if (ameaca) {
+      const ponto = pontoDeChute(bola, GOL_B, -55);
+      meus.filter(({ d }) => hip(d, ponto) > 40 && hip(d, ponto) < 340)
+        .sort((a, b) => hip(a.d, ponto) - hip(b.d, ponto))
+        .slice(0, 2)
+        .forEach(({ d, i }) => out.push({ idx: i, disco: d, alvoX: ponto.x, alvoY: ponto.y, tipo: 'bloqueio' }));
     }
   }
 
-  // posicionamento: os 2 botões mais perto do ponto de chute
-  const ponto = pontoDeChute(bola, GOL_A, 40);
-  const perto = meus
-    .filter(({ d }) => hip(d, ponto) > 12 && hip(d, ponto) < 340)
-    .sort((a, b) => hip(a.d, ponto) - hip(b.d, ponto))
-    .slice(0, 2);
-  for (const { d, i } of perto) {
-    out.push({ idx: i, disco: d, alvoX: ponto.x, alvoY: ponto.y, tipo: 'posicao' });
+  // chutes: QUALQUER botão atrás da bola e perto — quem julga se vale é a SIMULAÇÃO
+  // (ela rejeita gol contra com −100000 e premia a bola que avança pro gol)
+  const chutes = [];
+  for (const { d, i } of meus) {
+    const dist = hip(d, bola);
+    if (dist > 8 && dist < 340 && alinhamento(d, bola, GOL_A) > 0.05) {
+      chutes.push({ idx: i, disco: d, alvoX: bola.x, alvoY: bola.y, tipo: 'chute', dist });
+    }
   }
+  chutes.sort((a, b) => a.dist - b.dist); // perto primeiro: empate na avaliação → o mais certeiro
+  for (const { dist, ...c } of chutes) out.push(c);
 
-  // aproximação: o botão mais perto da bola
-  const maisPerto = meus.slice().sort((a, b) => hip(a.d, bola) - hip(b.d, bola))[0];
-  if (maisPerto && hip(maisPerto.d, bola) > 40 && hip(maisPerto.d, bola) < 340) {
-    out.push({ idx: maisPerto.i, disco: maisPerto.d, alvoX: bola.x, alvoY: bola.y, tipo: 'aproximar' });
+  // posicionamento: correr pra TRÁS da bola (40px e 90px atrás) — no mínimo 40px de corrida
+  const mapa = new Map();
+  for (const recuo of [40, 90]) {
+    const ponto = pontoDeChute(bola, GOL_A, recuo);
+    for (const { d, i } of meus) {
+      const dist = hip(d, ponto);
+      if (dist > 40 && dist < 340) {
+        const prev = mapa.get(i);
+        if (!prev || prev.dist > dist) mapa.set(i, { idx: i, disco: d, alvoX: ponto.x, alvoY: ponto.y, tipo: 'posicao', dist });
+      }
+    }
   }
+  const pos = [...mapa.values()].sort((a, b) => a.dist - b.dist).slice(0, 3);
+  for (const { dist, ...c } of pos) out.push(c);
 
   return out;
 }

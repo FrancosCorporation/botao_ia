@@ -127,10 +127,10 @@ function rodaFisica() {
 
 const INTENCAO = {
   chute: 'IA CHUTA pro gol!',
-  posicao: 'IA se posiciona atrás da bola pra chutar',
+  posicao: 'IA corre pra trás da bola (vai chutar)',
   bloqueio: 'IA bloqueia o caminho do gol',
   goleiro: 'Goleiro acompanha a bola',
-  aproximar: 'IA avança em direção à bola',
+  aproximar: 'IA avança rumo à bola',
 };
 
 function lanceDaIA() {
@@ -237,4 +237,6 @@ window.__botao = {
   get selecao() { return discoSelecionado ? { x: discoSelecionado.x, y: discoSelecionado.y } : null; },
   get arrasto() { return arrasto; },
   get esperando() { return esperandoFisica; },
+  get lancesIAFeitos() { return lancesIAFeitos; },
+  get movidosIA() { return movidosIA.length; },
 };
