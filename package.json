@@ -1,0 +1,1 @@
+{"name": "botao-ia", "version": "1.0.0", "description": "Futebol de botão com IA heurística - jogo no browser, sem dependência externa", "main": "server.js", "type": "module", "license": "MIT", "author": "Rodolfo Franco (FrancosCorporation)", "scripts": {"start": "node server.js", "test": "node --test \"test/*.mjs\""}, "engines": {"node": ">=18"}}
